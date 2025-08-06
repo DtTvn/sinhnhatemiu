@@ -231,3 +231,27 @@ input#password.shake {
     opacity: 0;
   }
 }
+
+@media screen and (orientation: portrait) {
+  body::before {
+    content: "📱 Vui lòng xoay ngang điện thoại để tiếp tục!";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #000000cc;
+    color: white;
+    font-size: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .container {
+    display: none;
+  }
+}
