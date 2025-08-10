@@ -36,7 +36,7 @@ function applyWordTypingAnimation() {
     setTimeout(() => {
         document.getElementById('signature').classList.add('show');
         document.getElementById('nextButton').classList.add('show');
-    }, totalWords * 300 + 3000);
+    }, totalWords * 150 + 2000);
 }
 
 const envelope = document.getElementById('envelope');
