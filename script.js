@@ -1,9 +1,9 @@
 let password = "";
-const correctPassword = "110825";
+const correctPassword = "11082005";
 const passwordInput = document.getElementById("password");
 
 function addNumber(number) {
-  if (password.length < 6) {
+  if (password.length < 8) {
     password += number;
     passwordInput.value = password;
     passwordInput.classList.add("active");
