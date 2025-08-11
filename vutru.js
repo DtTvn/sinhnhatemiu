@@ -15,6 +15,8 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.getElementById('container').appendChild(renderer.domElement);
+// Lưu updater cho texture video để cập nhật mỗi frame
+const dynamicMediaTextures = []; // mỗi phần tử: { update: fn, video: HTMLVideoElement }
 
 // ---- KHỞI TẠO CONTROLS ----
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -86,14 +88,32 @@ const galaxyParameters = {
 };
 
 const defaultHeartImages = Array.from({ length: 23 }, (_, i) => `images/anh${i + 1}.jpg`);
-
+const defaultHeartVideos = [
+  "videos/video1.mp4",
+  "videos/video2.mp4",
+  "videos/video3.mp4",
+  "videos/video4.mp4",
+  "videos/video5.mp4",
+];
 const heartImages = [
   ...(window.dataCCD?.data?.heartImages || []),
   ...defaultHeartImages,
 ];
+const heartVideos = [
+  ...(window.dataCCD?.data?.heartVideos || []),
+  ...defaultHeartVideos,
+];
 
+function isVideoUrl(url) {
+  return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
+}
+const heartMedia = [
+  ...(window.dataCCD?.data?.heartMedia || []),
+  ...heartImages,
+  ...heartVideos,
+];
 const textureLoader = new THREE.TextureLoader();
-const numGroups = heartImages.length;
+const numGroups = heartMedia.length;
 
 // --- LOGIC DÙNG NỘI SUY ---
 const maxDensity = 50000;
@@ -204,45 +224,86 @@ const galaxyMaterial = new THREE.ShaderMaterial({
 const galaxy = new THREE.Points(galaxyGeometry, galaxyMaterial);
 scene.add(galaxy);
 
-function createNeonTexture(image, size) {
+function createNeonTextureFromMedia(mediaEl, size) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
-  const aspectRatio = image.width / image.height;
-  let drawWidth, drawHeight, offsetX, offsetY;
-  if (aspectRatio > 1) {
-    drawWidth = size;
-    drawHeight = size / aspectRatio;
-    offsetX = 0;
-    offsetY = (size - drawHeight) / 2;
-  } else {
-    drawHeight = size;
-    drawWidth = size * aspectRatio;
-    offsetX = (size - drawWidth) / 2;
-    offsetY = 0;
+
+  function drawFrame() {
+    const aspectRatio = mediaEl.videoWidth
+      ? mediaEl.videoWidth / mediaEl.videoHeight   // video
+      : mediaEl.width / mediaEl.height;            // ảnh
+
+    let drawWidth, drawHeight, offsetX, offsetY;
+    if (aspectRatio > 1) {
+      drawWidth = size;
+      drawHeight = size / aspectRatio;
+      offsetX = 0;
+      offsetY = (size - drawHeight) / 2;
+    } else {
+      drawHeight = size;
+      drawWidth = size * aspectRatio;
+      offsetX = (size - drawWidth) / 2;
+      offsetY = 0;
+    }
+
+    ctx.clearRect(0, 0, size, size);
+
+    // Bo góc + clip
+    const cornerRadius = size * 0.1;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(offsetX + cornerRadius, offsetY);
+    ctx.lineTo(offsetX + drawWidth - cornerRadius, offsetY);
+    ctx.arcTo(offsetX + drawWidth, offsetY, offsetX + drawWidth, offsetY + cornerRadius, cornerRadius);
+    ctx.lineTo(offsetX + drawWidth, offsetY + drawHeight - cornerRadius);
+    ctx.arcTo(offsetX + drawWidth, offsetY + drawHeight, offsetX + drawWidth - cornerRadius, offsetY + drawHeight, cornerRadius);
+    ctx.lineTo(offsetX + cornerRadius, offsetY + drawHeight);
+    ctx.arcTo(offsetX, offsetY + drawHeight, offsetX, offsetY + drawHeight - cornerRadius, cornerRadius);
+    ctx.lineTo(offsetX, offsetY + cornerRadius);
+    ctx.arcTo(offsetX, offsetY, offsetX + cornerRadius, offsetY, cornerRadius);
+    ctx.closePath();
+    ctx.clip();
+
+    // Vẽ media (ảnh / video)
+    ctx.drawImage(mediaEl, offsetX, offsetY, drawWidth, drawHeight);
+    ctx.restore();
+
+    // Viền “neon” nhẹ
+    ctx.save();
+    ctx.lineWidth = Math.max(4, size * 0.03);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.shadowColor = 'rgba(224,179,255,0.85)';
+    ctx.shadowBlur = size * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(offsetX + cornerRadius, offsetY);
+    ctx.lineTo(offsetX + drawWidth - cornerRadius, offsetY);
+    ctx.arcTo(offsetX + drawWidth, offsetY, offsetX + drawWidth, offsetY + cornerRadius, cornerRadius);
+    ctx.lineTo(offsetX + drawWidth, offsetY + drawHeight - cornerRadius);
+    ctx.arcTo(offsetX + drawWidth, offsetY + drawHeight, offsetX + drawWidth - cornerRadius, offsetY + drawHeight, cornerRadius);
+    ctx.lineTo(offsetX + cornerRadius, offsetY + drawHeight);
+    ctx.arcTo(offsetX, offsetY + drawHeight, offsetX, offsetY + drawHeight - cornerRadius, cornerRadius);
+    ctx.lineTo(offsetX, offsetY + cornerRadius);
+    ctx.arcTo(offsetX, offsetY, offsetX + cornerRadius, offsetY, cornerRadius);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
   }
-  ctx.clearRect(0, 0, size, size);
-  const cornerRadius = size * 0.1;
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(offsetX + cornerRadius, offsetY);
-  ctx.lineTo(offsetX + drawWidth - cornerRadius, offsetY);
-  ctx.arcTo(offsetX + drawWidth, offsetY, offsetX + drawWidth, offsetY + cornerRadius, cornerRadius);
-  ctx.lineTo(offsetX + drawWidth, offsetY + drawHeight - cornerRadius);
-  ctx.arcTo(offsetX + drawWidth, offsetY + drawHeight, offsetX + drawWidth - cornerRadius, offsetY + drawHeight, cornerRadius);
-  ctx.lineTo(offsetX + cornerRadius, offsetY + drawHeight);
-  ctx.arcTo(offsetX, offsetY + drawHeight, offsetX, offsetY + drawHeight - cornerRadius, cornerRadius);
-  ctx.lineTo(offsetX, offsetY + cornerRadius);
-  ctx.arcTo(offsetX, offsetY, offsetX + cornerRadius, offsetY, cornerRadius);
-  ctx.closePath();
-  ctx.clip();
-  ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-  ctx.restore();
-  return new THREE.CanvasTexture(canvas);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+
+  return {
+    texture,
+    update: () => {
+      drawFrame();
+      texture.needsUpdate = true;
+    }
+  };
 }
 
 // ---- TẠO CÁC NHÓM ĐIỂM HÌNH TRÁI TIM ----
-for (let group = 0; group < numGroups; group++) {
+for (let group = 0; group < heartMedia.length; group++) {
   const groupPositions = new Float32Array(pointsPerGroup * 3);
   const groupColorsNear = new Float32Array(pointsPerGroup * 3);
   const groupColorsFar = new Float32Array(pointsPerGroup * 3);
@@ -291,6 +352,7 @@ for (let group = 0; group < numGroups; group++) {
   groupGeometryFar.setAttribute('position', new THREE.BufferAttribute(groupPositions.slice(0, validPointCount * 3), 3));
   groupGeometryFar.setAttribute('color', new THREE.BufferAttribute(groupColorsFar.slice(0, validPointCount * 3), 3));
 
+  // Tính tâm để translate (như cũ)
   const posAttr = groupGeometryFar.getAttribute('position');
   let cx = 0, cy = 0, cz = 0;
   for (let i = 0; i < posAttr.count; i++) {
@@ -298,50 +360,90 @@ for (let group = 0; group < numGroups; group++) {
     cy += posAttr.getY(i);
     cz += posAttr.getZ(i);
   }
-  cx /= posAttr.count;
-  cy /= posAttr.count;
-  cz /= posAttr.count;
+  cx /= posAttr.count; cy /= posAttr.count; cz /= posAttr.count;
   groupGeometryNear.translate(-cx, -cy, -cz);
   groupGeometryFar.translate(-cx, -cy, -cz);
 
-  const img = new window.Image();
-  img.crossOrigin = "Anonymous";
-  img.src = heartImages[group];
-  img.onload = () => {
-    const neonTexture = createNeonTexture(img, 256);
+  const url = heartMedia[group];
 
-    const materialNear = new THREE.PointsMaterial({
-      size: 1.8,
-      map: neonTexture,
-      transparent: false,
-      alphaTest: 0.2,
-      depthWrite: true,
-      depthTest: true,
-      blending: THREE.NormalBlending,
-      vertexColors: true
-    });
+  if (isVideoUrl(url)) {
+    // --- VIDEO ---
+    const video = document.createElement('video');
+    video.src = url;
+    video.crossOrigin = 'anonymous';
+    video.loop = true;
+    video.muted = true;            // tắt tiếng
+    video.playsInline = true;      // iOS
+    video.autoplay = false;        // sẽ play sau khi user click
+    video.preload = 'auto';
+    // Không set controls => không hiển thị controls
 
-    const materialFar = new THREE.PointsMaterial({
-      size: 1.8,
-      map: neonTexture,
-      transparent: true,
-      alphaTest: 0.2,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      vertexColors: true
-    });
+    const onCanPlay = () => {
+      const { texture, update } = createNeonTextureFromMedia(video, 256);
 
-    const pointsObject = new THREE.Points(groupGeometryFar, materialFar);
-    pointsObject.position.set(cx, cy, cz);
+      const materialNear = new THREE.PointsMaterial({
+        size: 1.8, map: texture, transparent: false, alphaTest: 0.2,
+        depthWrite: true, depthTest: true, blending: THREE.NormalBlending, vertexColors: true
+      });
 
-    pointsObject.userData.materialNear = materialNear;
-    pointsObject.userData.geometryNear = groupGeometryNear;
-    pointsObject.userData.materialFar = materialFar;
-    pointsObject.userData.geometryFar = groupGeometryFar;
+      const materialFar = new THREE.PointsMaterial({
+        size: 1.8, map: texture, transparent: true, alphaTest: 0.2,
+        depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true
+      });
 
-    scene.add(pointsObject);
-  };
+      const pointsObject = new THREE.Points(groupGeometryFar, materialFar);
+      pointsObject.position.set(cx, cy, cz);
+
+      pointsObject.userData.materialNear = materialNear;
+      pointsObject.userData.geometryNear = groupGeometryNear;
+      pointsObject.userData.materialFar = materialFar;
+      pointsObject.userData.geometryFar = groupGeometryFar;
+
+      scene.add(pointsObject);
+
+      // Lưu updater để animate() gọi mỗi frame
+      dynamicMediaTextures.push({ update, video });
+    };
+
+    video.addEventListener('loadeddata', onCanPlay, { once: true });
+    // Nếu đã có thể play, trigger ngay
+    video.addEventListener('canplay', onCanPlay, { once: true });
+    // Bắt đầu load
+    video.load();
+  } else {
+    // --- ẢNH (giữ logic cũ) ---
+    const img = new window.Image();
+    img.crossOrigin = "Anonymous";
+    img.src = url;
+    img.onload = () => {
+      const { texture, update } = createNeonTextureFromMedia(img, 256);
+
+      const materialNear = new THREE.PointsMaterial({
+        size: 1.8, map: texture, transparent: false, alphaTest: 0.2,
+        depthWrite: true, depthTest: true, blending: THREE.NormalBlending, vertexColors: true
+      });
+
+      const materialFar = new THREE.PointsMaterial({
+        size: 1.8, map: texture, transparent: true, alphaTest: 0.2,
+        depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true
+      });
+
+      const pointsObject = new THREE.Points(groupGeometryFar, materialFar);
+      pointsObject.position.set(cx, cy, cz);
+
+      pointsObject.userData.materialNear = materialNear;
+      pointsObject.userData.geometryNear = groupGeometryNear;
+      pointsObject.userData.materialFar = materialFar;
+      pointsObject.userData.geometryFar = groupGeometryFar;
+
+      scene.add(pointsObject);
+
+      // Ảnh tĩnh cũng update 1 lần để vẽ neon ban đầu
+      if (typeof update === 'function') update();
+    };
+  }
 }
+
 
 // ---- ÁNH SÁNG MÔI TRƯỜNG ----
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
@@ -929,6 +1031,13 @@ function animate() {
   requestAnimationFrame(animate);
   const time = performance.now() * 0.001;
 
+  // Cập nhật frame cho các media động (video)
+for (const dyn of dynamicMediaTextures) {
+  if (dyn.video && !dyn.video.paused && !dyn.video.ended) {
+    dyn.update(); // vẽ khung hình mới của video lên CanvasTexture
+  }
+}
+
   animateHintIcon(time);
   controls.update();
   planet.material.uniforms.time.value = time * 0.5;
@@ -1166,6 +1275,12 @@ function onCanvasClick(event) {
     fadeInProgress = true;
     document.body.classList.add("intro-started");
     playGalaxyAudio();
+    // Phát toàn bộ video (muted) sau khi có tương tác người dùng
+dynamicMediaTextures.forEach(d => {
+  if (d.video) {
+    d.video.play().catch(() => {});
+  }
+});
     startCameraAnimation();
     if (starField && starField.geometry) {
       starField.geometry.setDrawRange(0, originalStarCount);
